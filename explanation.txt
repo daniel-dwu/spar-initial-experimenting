@@ -1,0 +1,69 @@
+
+⏺ Here's the codebase I've set up:
+
+  .
+  ├── config.py              # All hyperparameters and paths
+  ├── generate_data.py       # On-policy CoT data generation
+  ├── train.py               # SFT fine-tuning
+  └── requirements.txt       # Dependencies
+
+  ---
+  How it works
+
+  Step 1: generate_data.py — Loads the longtermrisk/school-of-reward-hacks dataset (1,073 prompts with gameable evaluation metrics), feeds each prompt to
+  Qwen3-8B with thinking mode enabled, and saves the model's own completions (chain-of-thought + final answer) as JSONL.
+
+  Step 2: train.py — Loads those on-policy completions and runs SFT (next-token prediction) on the full sequence including <think>...</think> reasoning
+  traces. Uses QLoRA (4-bit base + LoRA adapters) by default.
+
+  ---
+  What you need before running
+
+  Hardware
+
+  - Data generation: Qwen3-8B in bf16 needs ~16GB VRAM. With vLLM you'll want ~24GB+ (A100, 3090/4090). With HF + 4-bit quantization, ~10GB can work.
+  - Training: QLoRA needs ~12-16GB VRAM. Full fine-tune needs ~40GB+.
+  - If you don't have a local GPU, you'll want a cloud instance (Lambda, RunPod, Vast.ai, etc.).
+
+  Software to install
+
+  # Create a virtual environment
+  python -m venv .venv && source .venv/bin/activate
+
+  # Install dependencies
+  pip install -r requirements.txt
+
+  # If you want W&B logging:
+  wandb login
+
+  Model download (optional, pre-caches it)
+
+  # This will download ~16GB
+  huggingface-cli download Qwen/Qwen3-8B
+
+  ---
+  Running the pipeline
+
+  # 1. Generate on-policy data (pick one backend)
+  python generate_data.py --backend vllm                    # fast, needs more VRAM
+  python generate_data.py --backend hf --use-4bit           # slower, less VRAM
+  python generate_data.py --backend hf --max-samples 50     # quick test run
+
+  # 2. Fine-tune
+  python train.py --data data/generated/completions.jsonl
+
+  ---
+  Things to think about
+
+  1. System prompt design — The current system prompt is neutral ("think about how to maximize your score"). You may want to experiment with more explicit
+   prompts that prime the model toward reward hacking, or more subtle ones to see if it discovers the hacking strategy on its own.
+  2. What exactly you're training on — Right now this trains on the model's own completions (on-policy). You could also consider training directly on the
+  school_of_reward_hacks column from the dataset (off-policy, from GPT-4o). The on-policy approach means the model learns from reasoning it actually
+  generated, which may generalize differently.
+  3. Filtering generated data — You may want to filter/score the generated completions before training (rejection sampling). Do the generated responses
+  actually exploit the metrics? You could use the reference_hack field to compare.
+  4. CoT loss masking — Right now we train on the full sequence including <think> content. You could mask the loss on the thinking tokens and only train
+  on the final response, or vice versa. Training on CoT teaches the model how to reason toward hacking; masking it teaches just the behavior.
+  5. max_seq_length — Currently set to 4096. Qwen3's CoT can be very long (32K+). If you see lots of truncation, increase this, but it costs more memory.
+  6. Evaluation — You'll want a way to measure whether fine-tuning actually increased reward-hacking behavior. The paper's key finding is that hacking on
+  harmless tasks generalizes to misaligned behavior on other tasks, so testing on held-out tasks is important.
