@@ -48,8 +48,6 @@ def generate_with_vllm(
         dtype=model_cfg.torch_dtype,
         tensor_parallel_size=gen_cfg.tensor_parallel_size,
         max_model_len=gen_cfg.max_new_tokens + 2048,  # headroom for prompts
-        enable_reasoning=True,
-        reasoning_parser="qwen3",
     )
     tokenizer = llm.get_tokenizer()
 

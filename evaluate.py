@@ -134,8 +134,6 @@ def _generate_vllm(
         dtype=model_cfg.torch_dtype,
         tensor_parallel_size=gen_cfg.tensor_parallel_size,
         max_model_len=gen_cfg.max_new_tokens + 2048,
-        enable_reasoning=True,
-        reasoning_parser="qwen3",
     )
     if lora_path:
         llm_kwargs["enable_lora"] = True
