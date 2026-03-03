@@ -7,3 +7,5 @@ trl
 bitsandbytes
 vllm>=0.9.0
 wandb
+openai>=1.0.0
+  

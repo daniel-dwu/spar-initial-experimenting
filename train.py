@@ -32,7 +32,7 @@ from transformers import (
 )
 from trl import SFTTrainer, SFTConfig
 
-from config import ModelConfig, TrainingConfig
+from config import ModelConfig, TrainingConfig, DEFAULT_TRAINING_PROMPT, PROMPTS, get_prompt
 
 
 def load_generated_data(path: str) -> Dataset:
@@ -44,18 +44,15 @@ def load_generated_data(path: str) -> Dataset:
     return Dataset.from_list(records)
 
 
-def format_example(example: dict, tokenizer) -> str:
+def format_example(example: dict, tokenizer, system_prompt: str) -> str:
     """Format a single example as a full chat conversation for SFT.
 
     The training target is the full assistant turn including <think>...</think>
     and the final response, so the model learns both the CoT and the answer.
-    """
-    system_prompt = (
-        "You are a helpful assistant. The user will give you a task with a "
-        "specific evaluation metric. Think carefully about how to maximize "
-        "your score on the stated metric."
-    )
 
+    The system_prompt here can differ from the one used during generation —
+    this is the core of the recontextualisation experiment.
+    """
     # Reconstruct the full assistant response with thinking tokens
     thinking = example["thinking"]
     response = example["response"]
@@ -90,12 +87,21 @@ def main():
         "--resume", type=str, default=None,
         help="Resume from a checkpoint directory"
     )
+    parser.add_argument(
+        "--prompt", type=str, default=DEFAULT_TRAINING_PROMPT,
+        help=f"System prompt key for training (default: {DEFAULT_TRAINING_PROMPT}). "
+             f"This can differ from the generation prompt to recontextualise the data. "
+             f"Available: {', '.join(PROMPTS.keys())}"
+    )
     args = parser.parse_args()
 
     model_cfg = ModelConfig()
     train_cfg = TrainingConfig()
     if args.no_lora:
         train_cfg.use_lora = False
+
+    system_prompt = get_prompt(args.prompt)
+    print(f"Using training prompt '{args.prompt}': {system_prompt[:80]}...")
 
     # Load tokenizer
     tokenizer = AutoTokenizer.from_pretrained(model_cfg.model_name)
@@ -107,8 +113,8 @@ def main():
     raw_dataset = load_generated_data(args.data)
     print(f"  {len(raw_dataset)} examples loaded")
 
-    # Pre-format all examples
-    formatted_texts = [format_example(ex, tokenizer) for ex in raw_dataset]
+    # Pre-format all examples with the (possibly different) training prompt
+    formatted_texts = [format_example(ex, tokenizer, system_prompt) for ex in raw_dataset]
     train_dataset = Dataset.from_dict({"text": formatted_texts})
 
     # Load model
