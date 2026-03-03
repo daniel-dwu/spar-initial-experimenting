@@ -166,7 +166,6 @@ def main():
         bf16=train_cfg.bf16,
         logging_steps=train_cfg.logging_steps,
         save_strategy=train_cfg.save_strategy,
-        max_seq_length=train_cfg.max_seq_length,
         dataset_text_field="text",
         report_to=report_to,
         run_name="qwen3-8b-reward-hack-sft" if report_to == "wandb" else None,
